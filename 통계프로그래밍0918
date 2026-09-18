@@ -1,0 +1,298 @@
+# ==============================================================
+# Ch2. 데이터 프레임 다루기 - Review
+# ==============================================================
+
+library(tidyverse)
+
+
+# ================================================================
+# 2.2  패키지 dplyr에 의한 데이터 프레임 다루기
+# ================================================================
+
+#######################행(row) 대상 함수#####################
+
+## ----------조건에 의한 행 선택: filter() ------------------------
+mtcars_t = mtcars |>
+  rownames_to_column(var = "model") |>
+  as_tibble() #tibble형태로 변환, model변수 추가
+
+mtcars_t |> filter(mpg >= 30)
+mtcars_t |> filter(mpg <= 30 & cyl %in% c(6, 8) & am == 1)
+
+
+airs = airquality |> as_tibble() #<-, = 가능
+airs |> print(n = 5) #tibble에서만 갯수 지정 가능
+airs |> filter(is.na(Ozone) | is.na(Solar.R)) |> print(n=5)
+
+## ---------- 위치에 의한 행 선택: slice() 등 -----------------------
+iris_t = as_tibble(iris)
+iris_t |> slice(1:5)        # 첫 5개 행 선택
+iris_t |> slice(-(1:5))     # 첫 5개 행 제거
+iris_t |> slice(n())        # 마지막 행 (dplyr 함수와 함께만 사용 가능)
+iris_t |> slice_head(n = 3)
+iris_t |> slice_tail(n = 3)
+iris_t |> slice_head(prop = 0.1)   # 비율(prop)로도 지정 가능
+
+set.seed(1)   # 임의추출 결과를 고정하고 싶을 때
+
+iris_t |> slice_sample(n = 3)          # 3개 행 임의추출
+iris_t |> slice_sample(prop = 0.02)    # 전체의 2% 비복원추출 default
+iris_t |> slice_sample(prop = 0.02, replace = TRUE)   # 복원추출
+
+iris_t |> slice_max(Sepal.Width, n = 2)    # Sepal.Width가 가장 큰 2개 행
+iris_t |> slice_min(Petal.Length, n = 2)   # Petal.Length가 가장 작은 2개 행
+
+
+## ---------- 행의 정렬: arrange() ---------------------------------
+mtcars_t |> arrange(mpg)               # mpg 오름차순 (연비가 나쁜 차부터)
+mtcars_t |> arrange(desc(mpg))         # mpg 내림차순
+mtcars_t |> arrange(mpg, desc(wt))     # mpg가 같으면 wt(내림차순)를 두 번째 정렬 기준으로 사용
+
+
+## -----------중복된 행의 제거: distinct() --------------------------
+mtcars_t |> distinct(cyl)                    # cyl의 서로 다른 값 3종류
+mtcars_t |> distinct(cyl, .keep_all = TRUE)   # cyl 중복행 중 첫 행 + 모든 변수
+mtcars_t |> arrange(desc(mpg)) |> distinct(cyl, .keep_all = TRUE) # mpg 내림차순 정렬 후 중복 제거 → cyl별 mpg가 가장 큰 행 선택
+
+
+
+#######################열(column) 대상 함수#####################
+
+#detach("package:dplyr") #MASS(시각화에서 사용)의 select함수와 충돌 될 경우, select함수가 dpylr와 mass에 존재--> dplyr package에서 함수 사용 
+#library(dplyr)
+
+## -----------select() - 1) 열 번호·이름에 의한 선택 ----------------
+mpg |> select(1:3, 8:9)                      # 1~3번째, 8~9번째 열 선택
+mpg |> select(manufacturer:displ, cty:hwy)   # 열 이름으로 범위 지정
+mpg |> select(!c(1:3, 8:9))                  # 1~3번째, 8~9번째 열 제거
+mpg |> select(-c(1:3, 8:9))                  # 위와 동일 (마이너스 연산자)
+
+## -----------select() - 2) 조건에 의한 선택 (where()) --------------------
+mpg |> select(where(is.numeric))      # 숫자형 변수만 선택
+mpg |> select(where(is.character))    # 문자형 변수만 선택
+mpg |> select(where(is.numeric) | where(is.character)) # 숫자형이거나 문자형인 변수 선택
+
+## ----------select() - 3) tidyselect 헬퍼 함수 --------------------------
+
+mpg |> select(1, last_col()) |> print(n = 3)          # 첫번째와 마지막
+mpg |> select(starts_with("m")) |> print(n = 3)       # m으로 시작(대소문자 구분X)
+mpg |> select(ends_with("y")) |> print(n = 3)         # y로 끝남(대소문자 구분X)
+mpg |> select(contains("A")) |> print(n = 3)          # A를 포함(대소문자 구분X)
+mpg |> select(contains("A", ignore.case = FALSE)) |> print(n = 3)  # 대문자 A포함
+
+vars <- c("model", "hwy", "wt")
+mpg |> select(any_of(vars)) |> print(n = 3)
+mpg |> select(all_of(vars))   # error: vars에 없는 변수 이름이 있으면 오류 발생--> 반드시 일치하는 observation이 있어야한다.
+
+
+## --------열의 선택: pull() 벡터 추출 --------------------------------------
+mtcars |> pull()          # 마지막 변수(carb)를 벡터로 추출 --> 통계량을 구하거나 히스토그램을 그릴 때 벡터 이용
+mtcars |> pull(var = 1)   # 첫 번째 변수(mpg) 추출
+mtcars |> pull(var = am)  # 변수 이름으로 지정
+
+
+## -------열 이름 변경: rename() --------------------------------
+mpg |> select(maker = manufacturer)      # 이름만 변경 → 다른 변수는 모두 사라짐
+mpg |> select(maker = 1)                 # 첫번째 변수를 maker로 이름 변경
+mpg |> select(maker = 1, everything())   # 다른 변수 유지
+mpg |> rename(maker = 1)                 # 다른 변수 유지
+
+
+## -------열의 위치 변경: relocate() -----------------------------
+iris |> relocate(Species) |> head(n = 2)   # Species를 첫 번째 위치로, default
+iris |> relocate(ends_with("th"), .after = Species) |> head(n = 2)   # 이름이 th로 끝나는 변수를 Species 다음으로 이동
+iris |> relocate(ends_with("th"), .after = last_col()) |> head(n = 2)  # th로 끝나는 변수를 마지막 변수 다음으로 이동 
+
+
+## ------새로운 열의 추가: mutate() -----------------------------
+mtcars_t |> mutate(kml = 0.43 * mpg) |> print(n = 2, width = Inf) 
+# width = Inf: tibble의 모든 변수를 화면 크기 제한 없이 다 출력, default 맨 마지막열
+mtcars_t |> mutate(kml = 0.43 * mpg, .after = mpg) |> print(n = 2)  
+# .after / .before로 위치 지정
+mtcars_t |> mutate(kml = 0.43 * mpg, .before = 2) |> print(n = 2)
+
+
+#######################요약통계량 계산#####################
+
+## --------summarise()------------------------------------------------------
+mpg |> summarise(n = n(), n_hwy = n_distinct(hwy), avg_hwy = mean(hwy))
+#중복값이 존재할 수 있으므로 distinct로 구분
+
+mpg |> reframe(avg_hwy = mean(hwy), rng_hwy = range(hwy)) 
+# 길이가 2 이상(최솟값과 최댓값)인 결과를 반환하는 함수는 summarise() 대신 reframe() 사용
+
+airquality |> summarise(m_oz = mean(Ozone, na.rm = TRUE),
+                        m_solar = mean(Solar.R, na.rm = TRUE))  #결측값 제거
+
+
+
+#######################그룹 데이터 프레임 생성#####################
+
+## ------------ group_by() -----------------------------------------------------
+mtcars |> group_by(cyl) |> print(n = 3)
+mtcars |> group_by(cyl, am) |> print(n = 3) 
+# 변수 2개 이상을 지정하면 그 조합으로 그룹이 구성됨--> 6,4,8 3개
+
+mtcars |> group_by(cyl) |> count()   #그룹별 개수 확인--> tibble형태
+mtcars |> count(cyl)      # 위와 동일--> dataframe형태
+
+mtcars |> group_by(cyl) |> group_by(am, .add = TRUE) |> count()  
+# mtcars |> count(cyl, am)와 동일한 결과, 단 데이터 프레임(티블)
+mtcars |> group_by(cyl) |> group_by(am) |> count() 
+# .add = TRUE를 지정하지 않으면 기존 그룹 변수가 새 그룹 변수로 대체됨
+
+mtcars |> group_by(cyl) |> ungroup() |> count()   # A tibble: 1 x 1, n 32
+
+
+############# 그룹 데이터 프레임에서 dplyr 함수 작동 방식 #####################
+airs_M <- airquality |> 
+  group_by(Month)   # 다섯 문제 모두 월별로 구분된 데이터 프레임이 필요
+# 데이터 그룹 지정
+
+# 1) 월별 평균값
+airs_M |> summarise(avg_OZ = mean(Ozone, na.rm = TRUE))
+# 그룹 지정 별로 평균 구함 --> sql groupby
+
+# 2) 월별 결측 날수 · 관측 날수
+airs_M |> summarise(n_miss = sum(is.na(Ozone)), n_obs = sum(!is.na(Ozone)))
+
+# 3)
+airs_M %>% arrange(Day) %>% filter(!is.na(Ozone)) %>%  summarise(first_Oz = first(Ozone), last_Oz = last(Ozone))
+# na.rm지원x
+
+# 4) 
+airs_M %>% 
+  summarise(max_Oz = max(Ozone, na.rm = T),
+            min_Oz = min(Ozone, na.rm = TRUE))
+
+# 5) 월별로 개별값이 전체기간 평균값보다 작은 날수
+# 우선 평균을 먼저 구한다.
+
+m_oz = airquality %>% 
+  pull(Ozone) %>% 
+  mean(na.rm = T)
+m_oz
+#Pull을 이용하여 벡터값 추출 --> 통계량을 구하기 위해서는 벡터값으로 추출
+
+airs_M %>% 
+  summarise(low_oz=sum(Ozone<m_oz, na.rm = T))
+
+airquality %>% is.na() %>% any()
+airquality %>% is.na() %>% colSums() #변수별로 결측값 갯수 확인
+
+
+#6) 순위
+x = c(10, 20, 20, 40)
+x
+min_rank(x)
+min_rank(desc(x))
+
+
+#7) 새로운 변수 추가
+mpg %>% 
+  select(cyl,hwy) %>% 
+  mutate(std_hwy = hwy - mean(hwy), rank = min_rank(hwy)) %>% 
+  print(n=10)
+# 전체에서의 순위
+
+mpg %>% 
+  select(cyl,hwy) %>%
+  group_by(cyl) %>% 
+  mutate(std_hwy = hwy - mean(hwy), rank = min_rank(hwy)) %>% 
+  print(n=10)
+# 그룹 안에서의 순위
+
+
+#8)
+mpg %>% 
+  group_by(cyl) %>% 
+  arrange(hwy, .by_group = T) %>% 
+  select(model, hwy)
+
+mpg %>% 
+  group_by(cyl) %>% 
+  arrange(hwy) %>% 
+  select(model, hwy)
+#.bygroup이 없으면 hwy로 정렬
+
+
+#9)
+mpg %>% 
+  group_by(cyl) %>% 
+  filter(hwy==max(hwy)) %>% 
+  arrange(hwy, .by_group = T) %>% 
+  select(1:2, hwy) #그룹을 지정하면 그룹이 맨 앞 열로 온다.
+#중복값을 제거하고 싶을 때
+#--> filter대신 slice_max를 이용, slice_max는 중복값 제거 가능 or slice_head사용
+mpg %>% 
+  group_by(cyl) %>% 
+  slice_head(n=1) %>% 
+  arrange(hwy, .by_group = T) %>% 
+  select(1:2, hwy)
+
+#10)
+airs_M = airquality %>% 
+  group_by(Month) %>% 
+  select(Ozone, Month, Day)
+airs_M
+
+airs_M %>% 
+  slice_head(n=1) #그룹별로 한 행 추출-->그룹 개수와 동일
+airs_M %>% 
+  slice_tail(n=1) #그룹별로 마지막 행 추출-->그룹 개수와 동일
+airs_M %>% 
+  slice_min(Ozone, with_ties = F) #그룹별로 오존이 가장 작은 행 추출 --> 동점발생 가능(그룹보다 많을 수 있음) 
+                                  #-->with.ties로 중복제거
+airs_M %>% 
+  slice_max(Ozone)
+
+#13) 행단위 작업
+#rowwise()는 행단위 그룹 지정, group_by는 열단위 그룹 지정
+df1 = tibble(x=1:2, y=3:4, z=5:6)
+df1 %>% 
+  mutate(total = sum(x,y,z)) #1+2+3+4+5+6
+df1 %>%
+  rowwise() %>% 
+  mutate(total = sum(c_across(x:z))) #행별로 더함 --> across는 범위로 지정하여야함
+
+df2 = 
+  tibble(id = 1:3, w = 10:12, x=20:22, y=30:32)
+df2
+df2 %>% 
+  rowwise(id) %>% 
+  mutate(total = sum(c_across(where(is.numeric))))
+
+scores=tibble(국=c(90, 80), 영=c(70,90), 수=c(100,60))
+scores
+scores %>%
+  rowwise() %>% 
+  mutate(total = sum(c_across(국:수))) %>% 
+  mutate(평균 = mean(c_across(국:수)))
+# 범위를 지정하기 위해서 c_across를 사용
+
+
+
+
+#---------------------ch3 자료 시각화--------------------
+library(tidyverse)
+
+
+ggplot(data = mpg, mapping = aes(x=displ, y=hwy, color = cyl)) +  #--> ggplot과 geom함수 연결 함수
+ geom_point() 
+# 산점도는 세가지 변수 관계 파악 유리
+# geom끼리 +로 추가하면 그래프가 두개가 나타나는 것이 아닌 겹쳐서 나타남
+#aes는 중첩 가능
+
+
+ggplot(data = mpg, mapping = aes(x=displ, y=hwy, shape = drv)) +
+  geom_point()
+ggplot(data = mpg, mapping = aes(x=displ, y=hwy, size = cyl)) +
+  geom_point()
+ggplot(data = mpg, mapping = aes(x=displ, y=hwy, shape = drv, size = cyl)) +
+  geom_point()
+#shape는 범주형 변수만 가능
+#size는 범주형에 사용 불가: 범주형은 순서통계가 아니기 때문에 자료 왜곡의 여지가 있음
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(shape = 21, size = 2, , color="blue", fill = "red", stroke = 1)
+#stroke는 테두리 두께 설정
